@@ -1,3 +1,7 @@
+# My selected gitignore for Node.js projects
+
+notes.txt
+
 # Logs
 logs
 *.log

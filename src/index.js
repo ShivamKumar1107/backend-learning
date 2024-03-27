@@ -7,8 +7,17 @@ import connectDB from "./db/index.js"; // we are using import instead of require
 dotenv.config({ path: "./env" }); 
 // we are using import instead of require, so in json file in scripts we will add -r dotenv/config --experimental-json-modules after nodemon and before the file name
 
-connectDB();
-
+connectDB()
+.then(() => {
+    console.log("Database connected successfully");
+    app.listen(process.env.PORT || 3000 , () => {
+        console.log(`Server is running on port ${process.env.PORT}`);
+    }); // app.listen() is used to start the server on the specified port
+})
+.catch((error) => {
+    console.log("Error connecting to database", error);
+    throw error;
+}); // .then() and .catch() are used to handle the promise returned by connectDB() function
 
 
 
