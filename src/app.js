@@ -21,4 +21,15 @@ app.use(express.static('public')); // serve static files, such as images, CSS, J
 
 app.use(cookieParser()); // parse cookie header and populate req.cookies with an object keyed by the cookie names
 
+// routes import
+
+import userRoutes from './routes/user.routes.js';
+
+// routes declaration
+
+app.use('/api/v1/users', userRoutes);
+// use the userRoutes for any route that starts with /users, e.g. /users/register, /users/login, etc.
+//app.use() is used to mount the specified middleware function(s) at the path which is being specified
+
+
 export {app};

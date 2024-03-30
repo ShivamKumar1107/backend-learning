@@ -5,8 +5,9 @@ import dotenv from "dotenv";
 import connectDB from "./db/index.js"; // we are using import instead of require, so in json file in scripts we will add --experimental-json-modules after nodemon and before the file name
 
 dotenv.config({ path: "./env" }); 
-// we are using import instead of require, so in json file in scripts we will add -r dotenv/config --experimental-json-modules after nodemon and before the file name
+// we are using import instead of require, so in json file in scripts, we will add -r dotenv/config --experimental-json-modules after nodemon and before the file name
 
+import {app} from "./app.js"; // we are using import instead of require, so in json file in scripts, we will add --experimental-json-modules after nodemon and before the file name
 connectDB()
 .then(() => {
     console.log("Database connected successfully");
