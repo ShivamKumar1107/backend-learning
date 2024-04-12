@@ -1,8 +1,10 @@
 import {asyncHandler} from '../utils/asyncHandler.js';
 import  { ApiErrorHandler } from "../utils/ApiErrorHandler.js"
-import { User } from "../models/User.js";
+import User from "../models/user.model.js";
 import {uploadOnCloudinary} from "../utils/cloudinary.js";
 import { ApiResponse } from '../utils/ApiResponse.js';
+
+import fs from 'fs';
 
 const registerUser = asyncHandler(async (req, res) => {
     // get user details from frontend, request body
@@ -27,20 +29,28 @@ const registerUser = asyncHandler(async (req, res) => {
         throw ApiErrorHandler(400, "All fields are required")
     }
 
-    const existedUser = User.findOne({
+    const existedUser = await User.findOne({
         $or: [{ email }, { username }]
     })
 
     if(existedUser){
-        throw ApiErrorHandler(409, "User with email or username already exists")
+        fs.unlinkSync(req.files?.avatar[0]?.path); // delete the file from local storage
+        fs.unlinkSync(req.files?.coverImage[0]?.path); // delete the file from local storage
+        throw new ApiErrorHandler(409, "User with email or username already exists")
     }
 
     // handle image upload
     const avatarLocalPath = req.files?.avatar[0]?.path;      // const avatarPath = `./uploads/avatars/${avatar.name}`;
-    const coverLocalPath = req.files?.coverImage[0]?.path;        // const coverPath = `./uploads/covers/${cover.name}`;
+    // const coverLocalPath = req.files?.coverImage[0]?.path;        // const coverPath = `./uploads/covers/${cover.name}`;
+ 
+    // another way to handle image upload
+    let coverLocalPath;
+    if(req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length > 0){
+        coverLocalPath = req.files?.coverImage[0]?.path;
+    }
 
     if(!avatarLocalPath){
-        throw ApiErrorHandler(400, "Avatar is required")
+        throw new ApiErrorHandler(400, "Avatar is required")
     }
     // upload to cloudinary
     // const avatar = await cloudinary.uploader.upload(avatarLocalPath);
@@ -50,7 +60,7 @@ const registerUser = asyncHandler(async (req, res) => {
     const coverImage = await uploadOnCloudinary(coverLocalPath);
 
     if(!avatar){
-        throw ApiErrorHandler(500, "Error uploading avatar")
+        throw new ApiErrorHandler(500, "Error uploading avatar")
     }
 
     const user = await User.create({
@@ -58,8 +68,8 @@ const registerUser = asyncHandler(async (req, res) => {
         username,
         email,
         password,
-        avatar: avatar.secure_url,
-        coverImage: coverImage.secure_url || null // if coverImage is not uploaded
+        avatar: avatar.url,
+        coverImage: coverImage?.url || null // if coverImage is not uploaded
     }); // User.create is a mongoose method used to create a new user in the database
 
     const createdUser = await User.findById(user._id).select("-password -refreshToken"); 

@@ -2,7 +2,7 @@ import multer from "multer";
 
 const storage = multer.diskStorage({
     destination: function (req, file, cb) { // cb is callback function
-        cb(null, "/public/temp") // null is error, if there is no error, then null is passed
+        cb(null, "./public/temp") // null is error, if there is no error, then null is passed
     },
     filename: function (req, file, cb) { // cb is callback function
         // const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9) // generating unique file name
