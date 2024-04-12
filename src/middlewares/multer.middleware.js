@@ -12,4 +12,4 @@ const storage = multer.diskStorage({
 }); // diskStorage is used to store files on disk, destination is used to specify the folder where files will be stored, filename is used to specify the name of the file
 
 // const upload = multer({ storage: storage }) or in es6
-const upload = multer({ storage }) // multer is used to upload files
+export const upload = multer({ storage }) // multer is used to upload files
