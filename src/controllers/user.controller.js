@@ -3,8 +3,25 @@ import  { ApiErrorHandler } from "../utils/ApiErrorHandler.js"
 import User from "../models/user.model.js";
 import {uploadOnCloudinary} from "../utils/cloudinary.js";
 import { ApiResponse } from '../utils/ApiResponse.js';
+import jwt from 'jsonwebtoken';
 
 import fs from 'fs';
+
+const generateAccessTokenAndRefreshToken = async (userId) => {
+    try {
+        const user = await User.findById(userId);
+        const accessToken = user.generateToken();
+        const refreshToken = user.generateRefreshToken();
+
+        user.refreshToken = refreshToken;
+        await user.save({ validateBeforeSave: false }); // to avoid validation error
+
+        return { accessToken, refreshToken };
+
+    } catch (error) {
+        throw new ApiErrorHandler(500, "Error generating token");
+    }
+}
 
 const registerUser = asyncHandler(async (req, res) => {
     // get user details from frontend, request body
@@ -26,7 +43,7 @@ const registerUser = asyncHandler(async (req, res) => {
     // } or professional approach
 
     if([fullName, username, email, password].some(field => field === "")){
-        throw ApiErrorHandler(400, "All fields are required")
+        throw new ApiErrorHandler(400, "All fields are required")
     }
 
     const existedUser = await User.findOne({
@@ -76,7 +93,7 @@ const registerUser = asyncHandler(async (req, res) => {
     // find the user by id to remove password and refresh token from the response
     
     if(!createdUser){
-        throw ApiErrorHandler(500, "Error creating user")
+        throw new ApiErrorHandler(500, "Error creating user")
     }
 
 
@@ -85,4 +102,169 @@ const registerUser = asyncHandler(async (req, res) => {
     );
 });
 
-export { registerUser };
+const test = asyncHandler(async (req, res) => {
+    console.log(req.body.email);
+    res.status(200).json({
+        message: "Hello" + req.body.email
+    });
+});
+// was getting error while submitting the form, the error was: "TypeError: Cannot read property 'email' of undefined", 
+//the error was because i was sending form data from the frontend and i was trying to access it in the controller using req.body.email, 
+//but i was not using the middleware to parse the form data, so i used the middleware to parse the form data and 
+//then i was able to access the form data in the controller using req.body.email
+//to parse the form data, i can use the following code in the app.js file: app.use(express.urlencoded({ extended: true })); or
+//i can use multipart/form-data type while passing the form data from the frontend
+
+const loginUser = asyncHandler(async (req, res) => {
+    // get user details from frontend, request body
+    // validate user details, not empty, email format, password length
+    // check if user exists in the database: email or username
+    // compare password
+    // create token - access token, refresh token
+    // save refresh token in the database
+    // send cookies to the frontend
+    // return response to the frontend
+
+    const { username, email, password } = req.body;// get user details from frontend, request body
+
+
+    if(!username && !email){ // validate user details, not empty, email format, password length
+        throw new ApiErrorHandler(400, "All fields are required")
+    }
+
+    const user = await User.findOne({
+        $or: [{ email }, { username }]
+    }).then(async user => {
+        if(!user){
+            throw new ApiErrorHandler(404, "User not found")
+        }
+
+        const comparePassword = await user.isPasswordCorrect(password);
+
+        if(!comparePassword){
+            throw new ApiErrorHandler(401, "Invalid credentials")
+        }
+
+        // const { accessToken, refreshToken } = user.generateToken();
+
+        // user.refreshToken = refreshToken;
+        // user.save(); or 
+
+        const { accessToken, refreshToken } = await generateAccessTokenAndRefreshToken(user._id);
+
+        // res.cookie("refreshToken", refreshToken, {
+        //     httpOnly: true,
+        //     path: "/api/v1/users/refresh-token"
+        // }); or
+
+        const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
+
+        const options = {
+            httpOnly: true,
+            secure: true,
+        }
+
+
+        // res.cookie("refreshToken", refreshToken); here "refreshToken" is the name of the cookie and refreshToken is the value of the cookie
+        res
+        .status(200)
+        .cookie("accessToken",accessToken, options)
+        .cookie("refreshToken", refreshToken, options)
+        .json(
+            new ApiResponse(200, 
+                {
+                user: accessToken, loggedInUser, refreshToken // or {accessToken, loggedInUser, refreshToken}
+                // sending refreshToken to the frontend is not a good practice but for the devices that don't support httpOnly cookies, we can send it to the frontend
+                },
+                "User logged in successfully"
+            )
+        );
+    }).catch(err => {
+        throw new ApiErrorHandler(500, "Error logging in user")
+    });
+}); 
+
+const logoutUser = asyncHandler(async (req, res) => {
+    // clear cookies
+    // return response to the frontend
+
+    // User.findByIdAndUpdate(req.user._id, { refreshToken: "" }, { new: true }); // syntax is (id, {field: value}, {new: true}) // or
+
+    
+    await User.findByIdAndUpdate(
+        req.user._id, 
+        {
+            $set: { refreshToken: "" }
+        },
+        { new: true }
+    );
+
+    const options = {
+        httpOnly: true,
+        secure: true,
+    }
+
+    return res
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
+    .json(
+        new ApiResponse(200, null, "User logged out successfully")
+    );
+});
+// ^^^ Chronology: when user hits the logout endpoint it  goes to the route, then to the middleware, then to the controller, then to the model, then to the database, then back to the model, then to the controller, then to the middleware, then to the route, then to the frontend
+// in simple words: route -> middleware -> controller -> logoutUser
+
+const refreshAccessToken = asyncHandler(async (req, res) => {
+    // get refresh token from the frontend, request body
+    // check if refresh token exists in the database
+    // generate new access token
+    // return response to the frontend
+
+    const { refreshToken } = req.body || req.cookies;
+
+    if(!refreshToken){
+        throw new ApiErrorHandler(401, "Unauthorized access")
+    }
+
+    jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, async (err, decoded) => {
+        if(err){
+            throw new ApiErrorHandler(401, "Unauthorized access")
+        }
+
+        const user = await User.findById(decoded._id);
+
+        if(!user){
+            throw new ApiErrorHandler(404, "User not found")
+        }
+
+        if(user?.refreshToken !== refreshToken){
+            throw new ApiErrorHandler(401, "Invalid refresh token")
+        }
+
+        const { accessToken, newRefreshToken} = await generateAccessTokenAndRefreshToken(user._id);
+
+        const options = {
+            httpOnly: true,
+            secure: true,
+        }
+
+        res
+        .status(200)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", newRefreshToken, options)
+        .json(
+            new ApiResponse(
+                200,
+                {
+                    accessToken, refreshToken: newRefreshToken
+                },
+                "Access token refreshed successfully"
+            )
+        );
+    });
+    // after this we need to create a route for this controller in the user.routes.js file
+    // to test this, we can use postman and send a post request to the refresh token endpoint with the refresh token in the body
+});
+
+export { registerUser, loginUser, logoutUser, test, refreshAccessToken};

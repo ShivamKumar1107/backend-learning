@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+// import bodyParser from 'body-parser';
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.use(express.urlencoded({ extended: true }, {limit: '50kb'}));
 app.use(express.static('public')); // serve static files, such as images, CSS, JavaScript, etc.
 
 app.use(cookieParser()); // parse cookie header and populate req.cookies with an object keyed by the cookie names
+
 
 // routes import
 
